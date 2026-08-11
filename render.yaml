@@ -1,0 +1,20 @@
+# Optional: deploy on Render as one web service (API + built frontend).
+# Connect your GitHub repo in Render and it can pick this up automatically.
+
+services:
+  - type: web
+    name: wayflow
+    runtime: node
+    buildCommand: npm install && npm run build
+    startCommand: npm run start:prod
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: SERVE_STATIC
+        value: "true"
+      - key: DATABASE_URL
+        value: file:./dev.db
+      - key: CLIENT_URL
+        sync: false
+      - key: VITE_GITHUB_REPO_URL
+        sync: false

@@ -1,0 +1,25 @@
+{
+  "name": "wayflow",
+  "version": "1.0.0",
+  "private": true,
+  "description": "AI-powered workflow studio — turn business processes into visual, simulatable workflows",
+  "workspaces": [
+    "client",
+    "server"
+  ],
+  "scripts": {
+    "dev": "concurrently \"npm run dev -w server\" \"npm run dev -w client\"",
+    "build": "npm run db:generate -w server && npm run build -w server && npm run build -w client",
+    "start": "npm run start -w server",
+    "start:prod": "npm run db:push -w server && npm run start -w server",
+    "test": "npm run test -w server",
+    "test:e2e": "playwright test",
+    "db:push": "npm run db:push -w server",
+    "db:studio": "npm run db:studio -w server"
+    
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.51.0",
+    "concurrently": "^9.1.2"
+  }
+}
