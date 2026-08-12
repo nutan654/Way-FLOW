@@ -2,6 +2,7 @@
   "name": "wayflow",
   "version": "1.0.0",
   "private": true,
+  "type": "module",
   "description": "AI-powered workflow studio — turn business processes into visual, simulatable workflows",
   "workspaces": [
     "client",
