@@ -487,7 +487,6 @@ Potential next steps include:
 
 **Nutan Bisandre**
 
-Electronics & Communication Engineering
-IIITDM Jabalpur
+
 
 [GitHub](https://github.com/nutan654)
