@@ -1,271 +1,493 @@
-# 🌊 Wayflow
+# Way-FLOW
 
-**Turn a business process written in plain English into a visual, working workflow — automatically.**
+An AI-powered workflow studio that converts natural-language business processes into editable, executable, and testable workflow graphs.
 
-Describe what should happen ("when a support ticket comes in, classify it, notify Slack if urgent..."), and Wayflow turns that into an editable flowchart, runs it against sample data step by step, and generates documentation and test code for it. No workflow-building experience needed.
+Way-FLOW bridges the gap between no-code automation and traditional development. A user describes a business process in plain English, the system converts it into a structured workflow graph, provides a visual editor for modification, simulates execution against sample data, and generates documentation and tests from the resulting workflow.
 
----
+## Overview
 
-## Table of contents
+Way-FLOW is a full-stack workflow platform built around a typed workflow DSL.
 
-- [What is this, really?](#what-is-this-really)
-- [Features](#features)
-- [Tech stack](#tech-stack)
-- [How it works](#how-it-works)
-- [Getting started](#getting-started)
-- [Trying it out](#trying-it-out)
-- [Project structure](#project-structure)
-- [Environment variables](#environment-variables)
-- [Available scripts](#available-scripts)
-- [API reference](#api-reference)
-- [Testing](#testing)
-- [Deployment](#deployment)
-- [Contributing](#contributing)
-- [License](#license)
+The system combines:
 
----
+* Natural-language workflow generation
+* Interactive graph editing
+* Deterministic workflow simulation
+* Structural validation
+* AI-assisted documentation generation
+* Automatic test generation
+* Persistent workflow storage
+* Shareable read-only workflows
+* Local fallback execution without an AI API key
 
-## What is this, really?
+The architecture separates the visual editor, API layer, persistence, AI integration, and workflow execution engine.
 
-If you're new to this project, here's the plain-English version:
+## Key Engineering Features
 
-Imagine you want to automate something like *"when a customer emails support, figure out how urgent it is, and either reply automatically or alert a human."* Normally you'd need a no-code automation tool, or you'd write custom code by hand.
+* Natural language → structured workflow graph
+* Drag-and-drop workflow editor using React Flow
+* Typed workflow DSL based on nodes and directed edges
+* Deterministic in-process workflow simulation
+* Conditional branching and shared execution context
+* Pre-execution graph validation
+* AI-powered workflow parsing and content generation
+* Local keyword-based fallback when OpenAI is unavailable
+* Automatic Markdown documentation generation
+* Automatic Vitest test generation
+* PostgreSQL persistence through Prisma ORM
+* SQLite support for lightweight local development
+* Zod-based request and workflow validation
+* Shareable read-only workflow URLs
+* End-to-end browser testing with Playwright
+* Production deployment configuration for Vercel and Render
 
-Wayflow sits in between: you type the process out in a sentence or two, an AI model (or a simple built-in fallback that works with **no API key**) turns it into a structured flowchart, and then you can:
+## System Architecture
 
-- **See it** as boxes and arrows on a canvas (drag things around, add steps)
-- **Test it** by running fake data through it and watching each step execute
-- **Get docs and tests for it**, automatically written from the flowchart
+```text
+                         ┌─────────────────────────┐
+                         │      React Frontend     │
+                         │                         │
+                         │  Create                 │
+                         │  Editor                 │
+                         │  Simulate               │
+                         │  Export                 │
+                         └────────────┬────────────┘
+                                      │
+                                  REST API
+                                      │
+                                      ▼
+                         ┌─────────────────────────┐
+                         │   Express / TypeScript  │
+                         │                         │
+                         │  Validation             │
+                         │  Workflow API           │
+                         │  AI Integration         │
+                         └──────┬────────┬─────────┘
+                                │        │
+                     ┌──────────┘        └─────────────┐
+                     ▼                                 ▼
+              ┌──────────────┐                ┌────────────────┐
+              │   Prisma     │                │ Workflow Engine│
+              │    ORM       │                │                │
+              └──────┬───────┘                │ Graph Traversal│
+                     │                        │ Conditions     │
+                     ▼                        │ Context        │
+              ┌──────────────┐                │ Simulation     │
+              │ PostgreSQL   │                └────────────────┘
+              │              │
+              │ Workflows    │
+              │ Nodes        │
+              │ Edges        │
+              └──────────────┘
 
-It's a small full-stack app — a React frontend, an Express/TypeScript API, and a database — built to demonstrate an AI-assisted product from end to end: parsing natural language, a visual editor, a simulation engine, and deployable infrastructure.
-
-## Features
-
-- 📝 **Natural language → workflow** — paste a process description, get a structured graph of nodes and edges
-- 🖱️ **Visual drag-and-drop editor** — built on [React Flow](https://reactflow.dev/) (`@xyflow/react`)
-- ▶️ **Step-by-step simulation** — run the workflow against sample input and inspect exactly what happened at each node
-- ✅ **Validation** — catches disconnected nodes, missing triggers, and other structural problems before you run it
-- 📄 **Auto-generated documentation** — turns a workflow graph into readable markdown docs
-- 🧪 **Auto-generated tests** — turns a workflow graph into runnable Vitest test code
-- 🔌 **Works without an API key** — a local keyword-based parser handles the AI features if you don't have an OpenAI key
-- 🔗 **Shareable links** — generate a read-only link to a workflow
-
-## Tech stack
-
-| Layer | Technology |
-|---|---|
-| Frontend | React 19, TypeScript, Vite, Tailwind CSS, React Flow (`@xyflow/react`), Zustand, React Router |
-| Backend | Node.js, Express, TypeScript, Prisma ORM |
-| Database | PostgreSQL (SQLite for pure local dev, see below) |
-| AI | OpenAI API — optional, with a local fallback parser |
-| Testing | Vitest (unit), Playwright (end-to-end) |
-| Validation | Zod |
-
-## How it works
-
+                         ┌─────────────────────────┐
+                         │       OpenAI API        │
+                         │   Optional AI Layer     │
+                         └─────────────────────────┘
 ```
-┌─────────────┐      REST API      ┌────────────────────┐
-│  React UI   │ ◄────────────────► │   Express Server    │
-│  (Vite)     │                    │   (TypeScript)       │
-└─────────────┘                    └──────────┬──────────┘
-                                               │
-                       ┌───────────────────────┼───────────────────────┐
-                       │                       │                       │
-                 ┌─────▼─────┐          ┌─────▼─────┐          ┌──────▼──────┐
-                 │  Prisma    │          │  OpenAI    │          │  Workflow    │
-                 │  ORM / DB  │          │  API       │          │  Engine      │
-                 └────────────┘          └────────────┘          └──────────────┘
+
+## Workflow Model
+
+Every workflow is represented as a directed graph.
+
+A workflow consists of:
+
+```text
+Workflow
+ ├── Nodes
+ │    ├── trigger
+ │    ├── ai_classify
+ │    ├── condition
+ │    ├── action
+ │    ├── delay
+ │    └── escalate
+ │
+ └── Edges
+      ├── source
+      ├── target
+      └── optional branch label
 ```
 
-Every workflow is stored as a **directed graph** — a `Workflow DSL`:
+This representation provides a common format for:
 
-- **Nodes** are typed steps: `trigger`, `ai_classify`, `condition`, `action`, `delay`, `escalate`
-- **Edges** connect nodes, optionally labeled (for branching, e.g. "if urgent")
+* Visual editing
+* Validation
+* Simulation
+* Persistence
+* Documentation generation
+* Test generation
 
-The **simulation engine** runs entirely in-process, deterministically: it starts at the trigger node, walks the graph updating a shared context object, follows conditional branches, and records each step. No external calls happen during simulation — even AI-classification steps use local keyword matching so runs are fast, free, and repeatable.
+The graph is therefore the single source of truth across the application.
 
-For a deeper dive, see [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
+## Natural Language → Workflow
 
-## Getting started
+A user can describe a process such as:
 
-**Requirements:** [Node.js](https://nodejs.org) 20+ and npm 10+ (check with `node -v` and `npm -v`).
+```text
+When a support ticket arrives, classify its urgency,
+notify Slack if it is high priority, automatically reply
+with an FAQ if it is low priority, and escalate to a
+senior agent if there is no response within two hours.
+```
+
+Way-FLOW transforms the description into a structured graph containing typed nodes, connections, conditions, and execution metadata.
+
+The resulting workflow can then be inspected and modified visually before execution.
+
+## Workflow Editor
+
+The frontend uses React Flow to provide an interactive graph editor.
+
+Users can:
+
+* Add workflow steps
+* Connect nodes
+* Reconfigure branches
+* Move nodes
+* Inspect workflow structure
+* Zoom and pan across large graphs
+* Edit workflow metadata
+
+The UI operates on the same typed workflow representation consumed by the backend.
+
+## Workflow Simulation Engine
+
+The simulation engine executes workflows entirely in-process.
+
+```text
+Trigger
+   │
+   ▼
+Update Context
+   │
+   ▼
+Execute Node
+   │
+   ▼
+Evaluate Condition
+   │
+   ├───────────────┐
+   │               │
+   ▼               ▼
+Branch A        Branch B
+   │               │
+   └───────┬───────┘
+           ▼
+      Continue Graph
+           │
+           ▼
+      Execution Trace
+```
+
+The engine:
+
+1. Locates the trigger node.
+2. Initializes a shared execution context.
+3. Traverses the directed graph.
+4. Executes each node deterministically.
+5. Evaluates conditional branches.
+6. Updates execution context.
+7. Records each executed step.
+8. Produces a complete execution trace.
+
+Simulation intentionally avoids external API calls. AI-classification nodes use local keyword matching during simulation, making runs:
+
+* Fast
+* Deterministic
+* Free
+* Repeatable
+* Suitable for automated testing
+
+## Validation
+
+Workflows are validated before execution.
+
+The validation layer detects structural problems such as:
+
+* Missing trigger nodes
+* Disconnected nodes
+* Invalid edges
+* Broken workflow structure
+* Invalid node configuration
+* Unsupported node relationships
+
+Runtime API input is additionally validated using Zod schemas.
+
+This creates two levels of correctness:
+
+```text
+API Input Validation
+        ↓
+Workflow Graph Validation
+        ↓
+Simulation
+```
+
+## AI Integration
+
+OpenAI is an optional intelligence layer used for:
+
+* Natural-language workflow parsing
+* Documentation generation
+* Test generation
+
+The system does not require an API key to function.
+
+When `OPENAI_API_KEY` is unavailable, Way-FLOW falls back to a local keyword-based parser for workflow generation and local deterministic logic for simulation.
+
+This makes the application usable in development, testing, and demonstration environments without external AI dependencies.
+
+## Automatic Documentation
+
+A workflow graph can be converted into readable Markdown documentation.
+
+The generated documentation describes:
+
+* Workflow purpose
+* Trigger conditions
+* Processing steps
+* Branching logic
+* Actions
+* Escalation paths
+
+This keeps documentation synchronized with the actual workflow structure rather than relying on manually maintained descriptions.
+
+## Automatic Test Generation
+
+Way-FLOW can generate runnable Vitest tests directly from a workflow graph.
+
+This creates a development loop where:
+
+```text
+Natural Language
+       ↓
+Workflow Graph
+       ↓
+Simulation
+       ↓
+Generated Documentation
+       ↓
+Generated Tests
+```
+
+The workflow therefore becomes both an executable artifact and a source for its own documentation and test cases.
+
+## Persistence
+
+Workflow data is persisted through Prisma ORM.
+
+The primary production database is PostgreSQL.
+
+For lightweight local development, SQLite can be used without requiring a separate database server.
+
+The persistence layer stores workflow definitions and their graph structure while keeping the domain model independent of the frontend representation.
+
+## Technology Stack
+
+| Layer            | Technology                   |
+| ---------------- | ----------------------------- |
+| Frontend         | React 19, TypeScript, Vite   |
+| Styling          | Tailwind CSS                 |
+| Workflow Editor  | React Flow (`@xyflow/react`) |
+| State Management | Zustand                      |
+| Routing          | React Router                 |
+| Backend          | Node.js, Express, TypeScript |
+| ORM              | Prisma                       |
+| Database         | PostgreSQL                   |
+| Local Database   | SQLite                       |
+| Validation       | Zod                          |
+| AI               | OpenAI API                   |
+| Unit Testing     | Vitest                       |
+| E2E Testing      | Playwright                   |
+| Deployment       | Vercel + Render              |
+
+These technologies match the current repository implementation.
+
+## Project Structure
+
+```text
+Way-FLOW/
+├── client/
+│   ├── src/
+│   │   ├── pages/
+│   │   │   ├── Create/
+│   │   │   ├── Editor/
+│   │   │   ├── Simulate/
+│   │   │   └── Export/
+│   │   ├── components/
+│   │   ├── stores/
+│   │   ├── api/
+│   │   └── types/
+│   └── vite.config.ts
+│
+├── server/
+│   ├── src/
+│   │   ├── routes/
+│   │   ├── services/
+│   │   ├── engine/
+│   │   ├── validation/
+│   │   └── ...
+│   └── prisma/
+│
+├── api/
+├── docs/
+├── e2e/
+├── package.json
+├── playwright.config.ts
+├── render.yaml
+└── vercel.json
+```
+
+The repository currently separates the frontend and backend into `client/` and `server/`, with dedicated API, documentation, and end-to-end testing infrastructure.
+
+## Local Development
+
+### Requirements
+
+* Node.js 20+
+* npm 10+
+
+Clone the repository:
 
 ```bash
-# 1. Clone the repo
-git clone https://github.com/YOUR_USERNAME/wayflow.git
-cd wayflow
+git clone https://github.com/nutan654/Way-FLOW.git
+cd Way-FLOW
+```
 
-# 2. Install everything (frontend + backend, it's a single npm workspace)
+Install dependencies:
+
+```bash
 npm install
+```
 
-# 3. Set up environment files
+Create environment files:
+
+```bash
 cp server/.env.example server/.env
 cp client/.env.example client/.env
+```
 
-# 4. Create the local database
+Initialize the database:
+
+```bash
 npm run db:push
+```
 
-# 5. Start both the API and the frontend, with hot reload
+Start the frontend and backend:
+
+```bash
 npm run dev
 ```
 
-Open **http://localhost:5173** in your browser — the frontend talks to the API running on port `3001`.
+The frontend runs on:
 
-That's it — the app works immediately with no OpenAI key. AI parsing, docs, and test generation will use a built-in local fallback instead of calling out to OpenAI.
-
-### Optional: connect a real OpenAI key
-
-For smarter parsing and generation, add a key to `server/.env`:
-
-```
-OPENAI_API_KEY=sk-...
+```text
+http://localhost:5173
 ```
 
-### Optional: link your GitHub repo in the app UI
+and communicates with the Express API running on port `3001`.
 
-Once you've pushed this to your own GitHub, set this in `client/.env` so the in-app "View source" links point to your repo instead of the placeholder:
+The application works without an OpenAI API key through its local fallback implementation.
 
-```
-VITE_GITHUB_REPO_URL=https://github.com/YOUR_USERNAME/wayflow
-```
+## Environment Variables
 
-## Trying it out
+### Server
 
-1. Go to **Create** → click **Use example** → **Generate Workflow**
-2. Open **Editor** and explore the canvas — drag nodes, zoom, inspect connections
-3. Go to **Simulate** → run it with the default sample ticket
-4. Open **Export** → generate docs and tests → download the workflow as JSON
-
-Example prompt (also built into the app as a one-click example):
-
-> When a support ticket arrives, classify urgency with AI, notify Slack if high priority, auto-reply with FAQ if low priority, and escalate to a senior agent if no response within 2 hours.
-
-## Project structure
-
-```
-wayflow/
-├── client/                 React frontend
-│   ├── src/
-│   │   ├── pages/          Route-level views (Create, Editor, Simulate, Export...)
-│   │   ├── components/     Reusable UI pieces
-│   │   ├── stores/         Zustand state stores
-│   │   ├── api/            Typed API client
-│   │   └── types/          Shared TypeScript types
-│   └── vite.config.ts
-├── server/                 Express API
-│   ├── src/
-│   │   ├── routes/         Express route handlers (workflows, ai, simulation, analytics, share)
-│   │   ├── services/       AI parsing/generation, simulation engine
-│   │   └── schema/         Zod validation schemas
-│   └── prisma/
-│       └── schema.prisma   Database schema
-├── api/                    Vercel serverless entry point (see Deployment)
-├── docs/                   Architecture, API reference, AI prompt notes
-├── e2e/                    Playwright end-to-end tests
-├── render.yaml             Render.com one-click deploy config
-└── vercel.json             Vercel deploy config
+```text
+DATABASE_URL
+OPENAI_API_KEY
 ```
 
-## Environment variables
+### Client
 
-**Server** (`server/.env`, copy from `server/.env.example`):
+```text
+VITE_API_URL
+VITE_GITHUB_REPO_URL
+```
 
-| Variable | Default | Notes |
-|---|---|---|
-| `DATABASE_URL` | `file:./dev.db` | Local dev uses SQLite. Production (Vercel full-stack) needs a real Postgres connection string — see [Deployment](#deployment). |
-| `PORT` | `3001` | API port |
-| `OPENAI_API_KEY` | — | Optional. Without it, AI features fall back to a local parser. |
-| `CLIENT_URL` | `http://localhost:5173` | Allowed CORS origin |
-| `SERVE_STATIC` | — | Set to `true` in production if this server should also serve the built frontend (not needed on Vercel) |
-
-**Client** (`client/.env`, copy from `client/.env.example`):
-
-| Variable | Notes |
-|---|---|
-| `VITE_GITHUB_REPO_URL` | Your public GitHub repo URL, shown in the app's sidebar and source links |
-| `VITE_API_URL` | Only needed if the frontend is deployed separately from the API (e.g. frontend on Vercel, API on Render). Leave unset if they share an origin. |
-
-## Available scripts
-
-Run these from the repo root:
-
-| Command | What it does |
-|---|---|
-| `npm run dev` | Starts the API and frontend together with hot reload |
-| `npm run build` | Production build — generates the Prisma client, builds the server, builds the client |
-| `npm run start` | Starts the built server (run `build` first) |
-| `npm run start:prod` | Pushes the DB schema, then starts the built server |
-| `npm test` | Runs backend unit tests (Vitest) |
-| `npm run test:e2e` | Runs Playwright end-to-end tests |
-| `npm run db:push` | Syncs the Prisma schema to your database |
-| `npm run db:studio` | Opens Prisma Studio, a GUI for browsing your database |
-
-## API reference
-
-All routes are prefixed with `/api`.
-
-| Method | Path | Purpose |
-|---|---|---|
-| `GET` | `/api/health` | Health check |
-| `GET` | `/api/workflows` | List all workflows |
-| `GET` | `/api/workflows/:id` | Get one workflow |
-| `POST` | `/api/workflows` | Create a workflow |
-| `PUT` | `/api/workflows/:id` | Update a workflow |
-| `DELETE` | `/api/workflows/:id` | Delete a workflow |
-| `POST` | `/api/workflows/:id/share` | Create a shareable read-only link |
-| `GET` | `/api/share/:token` | Fetch a workflow via its share link |
-| `POST` | `/api/ai/parse` | Natural language description → workflow graph |
-| `POST` | `/api/ai/document` | Workflow graph → markdown documentation |
-| `POST` | `/api/ai/tests` | Workflow graph → Vitest test code |
-| `POST` | `/api/simulation/run` | Run a simulation against sample input |
-| `POST` | `/api/simulation/validate` | Validate a workflow's graph structure |
-| `GET` | `/api/analytics` | Aggregate usage stats across workflows |
-
-Full request/response shapes and examples are in [`docs/API.md`](docs/API.md).
+`OPENAI_API_KEY` is optional because the application provides a local fallback parser.
 
 ## Testing
 
+Unit tests use Vitest:
+
 ```bash
-npm test          # backend unit tests (Vitest)
-npm run test:e2e  # end-to-end tests (Playwright) — starts the app and drives it in a real browser
+npm test
 ```
+
+End-to-end tests use Playwright:
+
+```bash
+npx playwright test
+```
+
+The test architecture covers both application logic and browser-level workflows.
 
 ## Deployment
 
-Two ready-to-use paths are included.
+The repository contains deployment configuration for:
 
-### Option A — single service on Render (simplest)
+```text
+Frontend  → Vercel
+Backend   → Render
+Database  → PostgreSQL
+```
 
-[`render.yaml`](render.yaml) deploys one Node service that serves both the API and the built frontend, with a persistent SQLite database on disk.
+Deployment configuration is maintained through:
 
-1. Push this repo to GitHub.
-2. In [Render](https://render.com), choose **New → Blueprint**, point it at your repo — it reads `render.yaml` automatically.
-3. Set `CLIENT_URL` to your Render URL, and optionally `OPENAI_API_KEY`.
-4. Deploy.
+```text
+render.yaml
+vercel.json
+```
 
-### Option B — frontend + API on Vercel (serverless)
+The production architecture keeps the frontend and API independently deployable.
 
-[`vercel.json`](vercel.json) builds the client as a static site and deploys the Express API as a single serverless function at `api/index.ts`. Because serverless functions don't have a persistent filesystem, this path needs a **hosted Postgres database** rather than the local SQLite file — the Prisma schema is already set to `provider = "postgresql"`.
+## Engineering Decisions
 
-1. Get a free Postgres database from [Neon](https://neon.tech) or [Supabase](https://supabase.com), and copy its connection string.
-2. Import the repo in [Vercel](https://vercel.com) — it detects `vercel.json` automatically.
-3. In the Vercel project's **Environment Variables**, set:
-   ```
-   DATABASE_URL=<your Neon/Supabase connection string>
-   OPENAI_API_KEY=<optional>
-   ```
-4. Push the schema to your new database once: `DATABASE_URL=<your string> npm run db:push -w server`
-5. Deploy. Visit `/api/health` on your deployed URL to confirm the API is live.
+### Graph as the Core Domain Model
 
-## Contributing
+The workflow graph is the central representation used across editing, execution, validation, persistence, documentation, and testing.
 
-Issues and pull requests are welcome. If you're picking this up as a learning project:
+This avoids maintaining separate representations of the same workflow in different application layers.
 
-1. Fork the repo and create a branch for your change
-2. Run `npm run dev` and confirm your change works locally
-3. Run `npm test` before opening a PR
-4. Open a PR describing what changed and why
+### Deterministic Simulation
 
-## License
+Simulation does not make external network calls.
 
-MIT — see [LICENSE](LICENSE).
+This makes workflow execution predictable and allows the same workflow to be tested repeatedly with identical input.
+
+### AI as an Optional Layer
+
+AI enhances workflow generation and developer productivity but is not required for the core application to function.
+
+This prevents the entire system from becoming dependent on an external model provider.
+
+### Typed Full-Stack Architecture
+
+TypeScript is used across the frontend and backend, while Zod provides runtime validation at API boundaries.
+
+This reduces mismatches between client payloads, server expectations, and workflow data structures.
+
+## Future Improvements
+
+Potential next steps include:
+
+* Background workflow execution
+* Persistent execution history
+* Real external action integrations
+* Webhook-triggered workflows
+* Additional AI providers
+* Workflow versioning
+* Collaborative workflow editing
+* Fine-grained execution permissions
+* Production-grade job queues
+* Workflow scheduling
+
+## Author
+
+**Nutan Bisandre**
+
+Electronics & Communication Engineering
+IIITDM Jabalpur
+
+[GitHub](https://github.com/nutan654)
